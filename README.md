@@ -3,8 +3,8 @@
 Ear-training web app: two piano notes play, you say whether the second went **up** or **down**.
 
 - **Levels:** half step (100¢) → quarter tone (50¢) → eighth tone (25¢) → 1/16 tone (12.5¢) → 1/32 tone (6.25¢)
-- **Auto level:** 5 correct in a row moves up, 3 misses in a row moves down
-- **Random start pitch** anywhere between A2 and E5 (off the keyboard grid), with occasional low notes down to C2
+- **Auto level:** 50 progress to move up (+1 per correct, −1 per miss, so guessing never levels you up; saved between sessions); 5 misses in a row drops back a level
+- **Random start pitch** between A2 and E5, with occasional low notes down to C2. Half steps start on real piano keys; finer levels start anywhere between keys (note names show the cents offset)
 - **Random velocity** per note (loudness + brightness), so volume can't give the answer away
 - Real piano: Salamander Grand Piano V3, 4 velocity layers, a sample every 3 semitones (C2–D♯5), ~2 MB
 - Exact microtonal pitch: each sample's tuning was measured (`tools/build_samples.py`) and is corrected at playback; both notes of a pair come from the same sample key

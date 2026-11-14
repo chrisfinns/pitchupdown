@@ -4,8 +4,9 @@ import * as log from './log.js';
 
 const NOTE_DUR = 1.0;   // seconds each note sounds
 const GAP = 0.3;        // silence between notes
-const LEVEL_UP = 5;     // correct in a row to move up
-const LEVEL_DOWN = 3;   // misses in a row to move down
+const LEVEL_UP = 50;    // level progress needed to move up (+1 per correct, −1 per miss)
+const LEVEL_DOWN = 5;   // misses in a row to drop back a level
+const REENTRY = 40;     // progress you return to on a level you dropped back to
 
 // Start-pitch range (MIDI). Singable core A2–E5; optional low extension C2–G#2.
 const CORE = [45, 76];
@@ -19,7 +20,7 @@ const el = {
   dot1: $('dot1'), dot2: $('dot2'),
   lower: $('lower'), higher: $('higher'),
   feedback: $('feedback'), detail: $('detail'),
-  streak: $('streak'), best: $('best'), acc: $('acc'), pips: $('pips'), pipsLabel: $('pipsLabel'),
+  streak: $('streak'), best: $('best'), acc: $('acc'), prog: $('prog'), progLabel: $('progLabel'), pbarFill: $('pbarFill'),
   optDyn: $('optDyn'), optLow: $('optLow'), optAuto: $('optAuto'),
   logOpen: $('logOpen'), logDlg: $('logDlg'), logClose: $('logClose'), logBody: $('logBody'),
   logLevel: $('logLevel'), logPeriod: $('logPeriod'), logExport: $('logExport'), logClear: $('logClear'),
@@ -33,7 +34,7 @@ function load() {
 function save() {
   try {
     localStorage.setItem(STORE, JSON.stringify({
-      level: state.level, best: state.best, perLevel: state.perLevel,
+      level: state.level, best: state.best, perLevel: state.perLevel, progress: state.progress,
       opts: { dyn: el.optDyn.checked, low: el.optLow.checked, auto: el.optAuto.checked },
     }));
   } catch { /* storage unavailable */ }
@@ -45,8 +46,9 @@ const state = {
   best: saved.best || 0,
   perLevel: Array.isArray(saved.perLevel) && saved.perLevel.length === LEVELS.length
     ? saved.perLevel : LEVELS.map(() => ({ c: 0, t: 0 })),
+  progress: Array.isArray(saved.progress) && saved.progress.length === LEVELS.length
+    ? saved.progress.map((x) => Math.min(LEVEL_UP, Math.max(0, x | 0))) : LEVELS.map(() => 0),
   streak: 0,
-  runUp: 0,     // consecutive correct at this level
   runDown: 0,   // consecutive misses at this level
   phase: 'idle', // idle | playing | awaiting | answered
   trial: null,
@@ -82,7 +84,8 @@ const rand = (a, b) => a + Math.random() * (b - a);
 function newTrial() {
   const cents = LEVELS[state.level].cents;
   const [lo, hi] = el.optLow.checked && Math.random() < LOW_CHANCE ? LOW : CORE;
-  const m1 = rand(lo, hi); // continuous: start pitch lands anywhere, off the keyboard grid
+  // Half steps start on real piano keys; finer levels start anywhere between keys.
+  const m1 = cents >= 100 ? Math.round(rand(lo, hi)) : rand(lo, hi);
   const dir = Math.random() < 0.5 ? 1 : -1;
   const m2 = m1 + (dir * cents) / 100;
   const vary = el.optDyn.checked;
@@ -180,26 +183,27 @@ function answer(dir) {
   actual.classList.add('right');
   if (!ok) chosen.classList.add('wrong');
 
-  const moved = `${t.dir > 0 ? 'up' : 'down'} ${fmtCents(t.cents)}`;
+  const moved = `${t.dir > 0 ? 'up' : 'down'} ${t.cents >= 100 ? 'a half step' : fmtCents(t.cents)}`;
   const detail = `${noteName(t.m1)} → ${noteName(t.m2)}`;
 
   let note = '';
   if (ok) {
     state.streak++;
     state.best = Math.max(state.best, state.streak);
-    state.runUp++;
     state.runDown = 0;
-    if (el.optAuto.checked && state.runUp >= LEVEL_UP && state.level < LEVELS.length - 1) {
+    state.progress[state.level] = Math.min(LEVEL_UP, state.progress[state.level] + 1);
+    if (el.optAuto.checked && state.progress[state.level] >= LEVEL_UP && state.level < LEVELS.length - 1) {
       setLevel(state.level + 1);
       note = ` · Level up: ${LEVELS[state.level].name}`;
     }
     setFeedback('good', `Correct — it went ${moved}`, detail + note);
   } else {
     state.streak = 0;
-    state.runUp = 0;
     state.runDown++;
+    state.progress[state.level] = Math.max(0, state.progress[state.level] - 1);
     if (el.optAuto.checked && state.runDown >= LEVEL_DOWN && state.level > 0) {
       setLevel(state.level - 1);
+      state.progress[state.level] = Math.min(state.progress[state.level], REENTRY);
       note = ` · Back to ${LEVELS[state.level].name}`;
     }
     setFeedback('bad', `Not quite — it went ${moved}`, detail + note);
@@ -212,7 +216,6 @@ function answer(dir) {
 function setLevel(i) {
   if (i === state.level) return;
   state.level = i;
-  state.runUp = 0;
   state.runDown = 0;
   // A trial in progress keeps its interval; the new level applies from the next one.
   save();
@@ -271,10 +274,11 @@ function render() {
   el.acc.title = `${rec.c} / ${rec.t} correct`;
 
   const auto = el.optAuto.checked && state.level < LEVELS.length - 1;
-  el.pips.innerHTML = auto
-    ? Array.from({ length: LEVEL_UP }, (_, i) => `<i class="pip${i < state.runUp ? ' on' : ''}"></i>`).join('')
-    : `<b>${rec.c}/${rec.t}</b>`;
-  el.pipsLabel.textContent = auto ? 'To level up' : 'Correct';
+  const prog = state.progress[state.level];
+  el.prog.innerHTML = auto ? `${prog}<small>/${LEVEL_UP}</small>` : `${rec.c}<small>/${rec.t}</small>`;
+  el.progLabel.textContent = auto ? 'To level up' : 'Correct';
+  el.pbarFill.style.width = auto ? `${(100 * prog) / LEVEL_UP}%` : `${rec.t ? (100 * rec.c) / rec.t : 0}%`;
+  el.prog.parentElement.title = auto ? '+1 for each correct answer, −1 for each miss' : '';
 }
 
 // ---------- log ----------

@@ -167,7 +167,7 @@ export function renderLog(container, { level = 'all', period = 'all' } = {}) {
     return `<li class="${good ? 'good' : 'bad'}">
       <span class="mark" aria-label="${good ? 'Correct' : 'Missed'}">${good ? '✓' : '✗'}</span>
       <span class="rnotes">${esc(noteName(e.m1))} → ${esc(noteName(m2Of(e)))}</span>
-      <span class="rmeta">${e.d > 0 ? '↑' : '↓'} ${fmtCents(e.c)}${good ? '' : ` · you said ${e.a > 0 ? '↑' : '↓'}`}</span>
+      <span class="rmeta">${e.d > 0 ? '↑' : '↓'} ${e.c >= 100 ? 'half step' : fmtCents(e.c)}${good ? '' : ` · you said ${e.a > 0 ? '↑' : '↓'}`}</span>
       <time>${when}</time>
     </li>`;
   }).join('');
