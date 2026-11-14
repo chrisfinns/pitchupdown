@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pitch Up Down</title>
+  <meta name="description" content="Ear training: hear two piano notes and decide if the pitch went up or down — from half steps to 1/32 tones.">
+  <meta name="theme-color" content="#f5f2ea" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151412" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232f5d50'/%3E%3Cpath d='M10 19l6-7 6 7' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <h1>Pitch Up Down</h1>
+      <p class="sub">Two piano notes. Did the second one go up or down?</p>
+    </header>
+
+    <section class="levels" aria-label="Difficulty">
+      <div class="seg" role="radiogroup" id="levels"></div>
+      <p class="level-name" id="levelName"></p>
+    </section>
+
+    <section class="stage">
+      <button class="play" id="play" type="button" aria-label="Play">
+        <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg>
+        <span id="playLabel">Play</span>
+      </button>
+      <div class="dots" aria-hidden="true">
+        <span class="dot" id="dot1">1</span>
+        <span class="dot-line"></span>
+        <span class="dot" id="dot2">2</span>
+      </div>
+      <button class="replay" id="replay" type="button" disabled>Replay <kbd>R</kbd></button>
+    </section>
+
+    <section class="answers">
+      <button class="ans" id="lower" type="button" disabled>
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5.5 12.5 12 19l6.5-6.5"/></svg>
+        Lower
+      </button>
+      <button class="ans" id="higher" type="button" disabled>
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg>
+        Higher
+      </button>
+    </section>
+
+    <p class="feedback" id="feedback" aria-live="polite">&nbsp;</p>
+    <p class="detail" id="detail">&nbsp;</p>
+
+    <section class="stats" aria-label="Score">
+      <div><b id="streak">0</b><span>Streak</span></div>
+      <div><b id="best">0</b><span>Best</span></div>
+      <div><b id="acc">–</b><span>This level</span></div>
+      <div class="pips-wrap"><span class="pips" id="pips"></span><span id="pipsLabel">To level up</span></div>
+    </section>
+
+    <section class="opts" aria-label="Options">
+      <label><input type="checkbox" id="optDyn" checked> Vary velocity</label>
+      <label><input type="checkbox" id="optLow" checked> Include low notes</label>
+      <label><input type="checkbox" id="optAuto" checked> Auto level</label>
+    </section>
+
+    <footer class="keys">
+      <span><kbd>Space</kbd> play / next</span>
+      <span><kbd>↑</kbd><kbd>↓</kbd> answer</span>
+      <span><kbd>1</kbd>–<kbd>5</kbd> level</span>
+    </footer>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
