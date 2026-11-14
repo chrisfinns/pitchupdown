@@ -2,8 +2,17 @@ import { SampledPiano, SynthPiano, prefetchSamples, keyFor, midiToFreq, inharmon
 import { LEVELS, noteName, fmtCents } from './music.js';
 import * as log from './log.js';
 
-const NOTE_DUR = 1.0;   // seconds each note sounds
-const GAP = 0.3;        // silence between notes
+const NOTE_DUR = 1.0;   // seconds each note sounds (fixed timing)
+const GAP = 0.3;        // silence between notes (fixed timing)
+// Varied timing: note length range (samples ring ~1.6 s before fading) and
+// pause bands from near-legato to a long silence, picked by weight.
+const DUR_RANGE = [0.5, 1.4];
+const GAPS = [
+  { w: 25, range: [0.05, 0.2] },
+  { w: 30, range: [0.2, 0.6] },
+  { w: 25, range: [0.6, 1.2] },
+  { w: 20, range: [1.2, 2.5] },
+];
 const LEVEL_UP = 50;    // level progress needed to move up (+1 per correct, −1 per miss)
 const LEVEL_DOWN = 5;   // misses in a row to drop back a level
 const REENTRY = 40;     // progress you return to on a level you dropped back to
@@ -21,7 +30,7 @@ const el = {
   lower: $('lower'), higher: $('higher'),
   feedback: $('feedback'), detail: $('detail'),
   streak: $('streak'), best: $('best'), acc: $('acc'), prog: $('prog'), progLabel: $('progLabel'), pbarFill: $('pbarFill'),
-  optDyn: $('optDyn'), optLow: $('optLow'), optAuto: $('optAuto'),
+  optDyn: $('optDyn'), optTime: $('optTime'), optLow: $('optLow'), optAuto: $('optAuto'),
   logOpen: $('logOpen'), logDlg: $('logDlg'), logClose: $('logClose'), logBody: $('logBody'),
   logLevel: $('logLevel'), logPeriod: $('logPeriod'), logExport: $('logExport'), logClear: $('logClear'),
 };
@@ -35,7 +44,7 @@ function save() {
   try {
     localStorage.setItem(STORE, JSON.stringify({
       level: state.level, best: state.best, perLevel: state.perLevel, progress: state.progress,
-      opts: { dyn: el.optDyn.checked, low: el.optLow.checked, auto: el.optAuto.checked },
+      opts: { dyn: el.optDyn.checked, time: el.optTime.checked, low: el.optLow.checked, auto: el.optAuto.checked },
     }));
   } catch { /* storage unavailable */ }
 }
@@ -56,6 +65,7 @@ const state = {
 };
 if (saved.opts) {
   el.optDyn.checked = saved.opts.dyn !== false;
+  el.optTime.checked = saved.opts.time !== false;
   el.optLow.checked = saved.opts.low !== false;
   el.optAuto.checked = saved.opts.auto !== false;
 }
@@ -91,7 +101,15 @@ function newTrial() {
   const vary = el.optDyn.checked;
   const v1 = vary ? Math.random() : 0.6;
   const v2 = vary ? Math.random() : 0.6;
-  return { m1, m2, dir, cents, v1, v2, key: keyFor(m1).midi, B: inharmonicity(midiToFreq(m1)) };
+  return { m1, m2, dir, cents, v1, v2, ...timing(), key: keyFor(m1).midi, B: inharmonicity(midiToFreq(m1)) };
+}
+
+// Note lengths and the silence between them, fixed per trial so Replay matches.
+function timing() {
+  if (!el.optTime.checked) return { d1: NOTE_DUR, d2: NOTE_DUR, gap: GAP };
+  let r = Math.random() * GAPS.reduce((s, g) => s + g.w, 0);
+  const band = GAPS.find((g) => (r -= g.w) < 0) || GAPS[GAPS.length - 1];
+  return { d1: rand(...DUR_RANGE), d2: rand(...DUR_RANGE), gap: rand(...band.range) };
 }
 
 function clearTimers() {
@@ -132,23 +150,23 @@ async function playTrial() {
   }
 
   const start = ctx.currentTime + 0.08;
-  const t2 = start + NOTE_DUR + GAP;
+  const t2 = start + t.d1 + t.gap;
   if (useSynth) {
-    synth.play(midiToFreq(t.m1), start, { velocity: 0.3 + 0.7 * t.v1, duration: NOTE_DUR, B: t.B });
-    synth.play(midiToFreq(t.m2), t2, { velocity: 0.3 + 0.7 * t.v2, duration: NOTE_DUR, B: t.B });
+    synth.play(midiToFreq(t.m1), start, { velocity: 0.3 + 0.7 * t.v1, duration: t.d1, B: t.B });
+    synth.play(midiToFreq(t.m2), t2, { velocity: 0.3 + 0.7 * t.v2, duration: t.d2, B: t.B });
   } else {
-    sampler.play(t.m1, start, { velocity: t.v1, duration: NOTE_DUR, keyMidi: t.key });
-    sampler.play(t.m2, t2, { velocity: t.v2, duration: NOTE_DUR, keyMidi: t.key });
+    sampler.play(t.m1, start, { velocity: t.v1, duration: t.d1, keyMidi: t.key });
+    sampler.play(t.m2, t2, { velocity: t.v2, duration: t.d2, keyMidi: t.key });
   }
 
   const lead = start - ctx.currentTime;
   at(lead, () => el.dot1.classList.add('on'));
-  at(lead + NOTE_DUR, () => el.dot1.classList.remove('on'));
-  at(lead + NOTE_DUR + GAP, () => {
+  at(lead + t.d1, () => el.dot1.classList.remove('on'));
+  at(lead + t.d1 + t.gap, () => {
     el.dot2.classList.add('on');
     if (state.phase === 'playing') { state.phase = 'awaiting'; render(); }
   });
-  at(lead + 2 * NOTE_DUR + GAP, () => el.dot2.classList.remove('on'));
+  at(lead + t.d1 + t.gap + t.d2, () => el.dot2.classList.remove('on'));
 }
 
 function primary() {
@@ -309,7 +327,7 @@ el.play.addEventListener('click', primary);
 el.replay.addEventListener('click', replay);
 el.lower.addEventListener('click', () => answer(-1));
 el.higher.addEventListener('click', () => answer(1));
-[el.optDyn, el.optLow, el.optAuto].forEach((o) => o.addEventListener('change', () => { save(); render(); }));
+[el.optDyn, el.optTime, el.optLow, el.optAuto].forEach((o) => o.addEventListener('change', () => { save(); render(); }));
 
 // After a mouse/touch click, drop focus so Space goes back to Play/Next.
 document.addEventListener('click', (e) => {

@@ -37,6 +37,7 @@ export function record(trial, answer) {
     a: answer,
     v1: r3(trial.v1),
     v2: r3(trial.v2),
+    g: r3(trial.gap),
   });
   if (list.length > MAX) list.splice(0, list.length - MAX);
   persist();
@@ -106,6 +107,8 @@ function analyze(list) {
     ['High · C4 and up', list.filter((e) => Math.round(e.m1) >= 60)],
     ['2nd note louder', list.filter((e) => e.v2 - e.v1 > LOUD_DIFF)],
     ['2nd note softer', list.filter((e) => e.v1 - e.v2 > LOUD_DIFF)],
+    ['Short pause · under 0.4 s', list.filter((e) => e.g != null && e.g < 0.4)],
+    ['Long pause · 1 s or more', list.filter((e) => e.g >= 1)],
   ].map(([label, l]) => ({ label, ...tally(l) }));
 
   const levels = LEVELS.map((lv, i) => ({ label: `${lv.name} · ${fmtCents(lv.cents)}`, ...tally(list.filter((e) => e.l === i)) }));
@@ -192,7 +195,7 @@ export function renderLog(container, { level = 'all', period = 'all' } = {}) {
 }
 
 export function exportCSV() {
-  const head = 'time,level,step_cents,direction,answer,correct,note1,note2,midi1,midi2,velocity1,velocity2';
+  const head = 'time,level,step_cents,direction,answer,correct,note1,note2,midi1,midi2,velocity1,velocity2,pause_s';
   const rows = entries().map((e) => [
     new Date(e.t).toISOString(),
     LEVELS[e.l]?.name ?? '',
@@ -206,6 +209,7 @@ export function exportCSV() {
     r3(m2Of(e)),
     e.v1,
     e.v2,
+    e.g ?? '',
   ].join(','));
   const blob = new Blob([[head, ...rows].join('\n')], { type: 'text/csv' });
   const a = document.createElement('a');
