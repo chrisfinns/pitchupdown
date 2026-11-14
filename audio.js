@@ -1,7 +1,10 @@
-// Synthesized piano voice (Web Audio). Additive partials with string
-// inharmonicity, velocity-dependent brightness and loudness, hammer noise,
-// and a small room reverb. Pitch is exact to the hundredth of a cent, so
-// microtonal steps are reliable.
+// Piano voices for Web Audio.
+//  - SampledPiano: Salamander Grand Piano V3 samples (4 velocity layers, a sample
+//    every 3 semitones), pitch-shifted by playbackRate with each sample's
+//    measured tuning corrected out, so microtonal steps are exact.
+//  - SynthPiano: additive-synthesis fallback used if samples fail to load.
+
+import { SAMPLES } from './samples.js';
 
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 const dbToGain = (db) => Math.pow(10, db / 20);
@@ -31,7 +34,7 @@ function makeImpulse(ctx, seconds, decay) {
   return buf;
 }
 
-export class Piano {
+export class SynthPiano {
   constructor(ctx) {
     this.ctx = ctx;
     this.voices = new Set();
@@ -155,5 +158,103 @@ export class Piano {
       }
     }
     this.voices.clear();
+  }
+}
+
+// ---------- sampled piano ----------
+
+const SAMPLE_DIR = 'samples/';
+const bytes = new Map(); // file -> Promise<ArrayBuffer>
+
+function fetchBytes(file) {
+  if (!bytes.has(file)) {
+    const p = fetch(SAMPLE_DIR + file, { priority: 'low' }).then((r) => {
+      if (!r.ok) throw new Error(`${file}: HTTP ${r.status}`);
+      return r.arrayBuffer();
+    });
+    p.catch(() => bytes.delete(file)); // allow a retry later
+    bytes.set(file, p);
+  }
+  return bytes.get(file);
+}
+
+// Start downloading every sample in the background (no AudioContext needed).
+export function prefetchSamples() {
+  for (const k of SAMPLES) for (const l of k.layers) fetchBytes(l.file).catch(() => {});
+}
+
+// Sample key used for a pitch: the nearest one. Both notes of a pair should use
+// the key chosen for the first note, so their interval is exact.
+export const keyFor = (midi) =>
+  SAMPLES.reduce((best, k) => (Math.abs(k.midi - midi) < Math.abs(best.midi - midi) ? k : best));
+
+// velocity 0..1 -> velocity layer plus a gain trim inside the layer (-3..0 dB),
+// so loudness rises smoothly across the whole range.
+function layerFor(key, velocity) {
+  const n = key.layers.length;
+  const x = clamp(velocity, 0, 0.9999) * n;
+  const i = Math.floor(x);
+  return { layer: key.layers[i], gain: dbToGain((x - i - 1) * 3) };
+}
+
+export class SampledPiano {
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.decoded = new Map(); // file -> Promise<AudioBuffer>
+    this.ready = new Map();   // file -> AudioBuffer
+    this.voices = new Set();
+    this.out = ctx.createGain();
+    this.out.connect(ctx.destination);
+  }
+
+  buffer(file) {
+    if (!this.decoded.has(file)) {
+      const p = fetchBytes(file)
+        .then((ab) => this.ctx.decodeAudioData(ab.slice(0)))
+        .then((buf) => (this.ready.set(file, buf), buf));
+      p.catch(() => this.decoded.delete(file));
+      this.decoded.set(file, p);
+    }
+    return this.decoded.get(file);
+  }
+
+  /** Decode the buffers these notes need; play() requires them. */
+  load(notes) {
+    return Promise.all(notes.map(({ keyMidi, velocity }) =>
+      this.buffer(layerFor(keyFor(keyMidi), velocity).layer.file)));
+  }
+
+  /**
+   * @param {number} midi  exact pitch (fractional MIDI)
+   * @param {number} t0    AudioContext time
+   * @param {object} o     { velocity 0..1, duration s, keyMidi: pitch that picks the sample }
+   */
+  play(midi, t0, { velocity = 0.6, duration = 1.0, keyMidi = midi } = {}) {
+    const key = keyFor(keyMidi);
+    const { layer, gain } = layerFor(key, velocity);
+    const buf = this.ready.get(layer.file);
+    if (!buf) throw new Error(`sample not loaded: ${layer.file}`);
+    const ctx = this.ctx;
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = Math.pow(2, (midi - key.midi) / 12 - layer.cents / 1200);
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, t0);
+    g.gain.setValueAtTime(gain, t0 + duration);
+    g.gain.setTargetAtTime(0, t0 + duration, 0.08); // damper
+    src.connect(g).connect(this.out);
+    src.start(t0);
+    src.stop(t0 + duration + 0.6);
+
+    const voice = { out: g, nodes: [src] };
+    this.voices.add(voice);
+    src.onended = () => this.voices.delete(voice);
+    return voice;
+  }
+
+  stopAll() {
+    SynthPiano.prototype.stopAll.call(this);
   }
 }

@@ -6,9 +6,15 @@ Ear-training web app: two piano notes play, you say whether the second went **up
 - **Auto level:** 5 correct in a row moves up, 3 misses in a row moves down
 - **Random start pitch** anywhere between A2 and E5 (off the keyboard grid), with occasional low notes down to C2
 - **Random velocity** per note (loudness + brightness), so volume can't give the answer away
-- Synthesized piano (Web Audio) — no audio files, exact microtonal pitch
+- Real piano: Salamander Grand Piano V3, 4 velocity layers, a sample every 3 semitones (C2–D♯5), ~2 MB
+- Exact microtonal pitch: each sample's tuning was measured (`tools/build_samples.py`) and is corrected at playback; both notes of a pair come from the same sample key
+- Falls back to a synthesized piano if samples can't load
 
 Keys: `Space` play/next · `↑` `↓` answer · `R` replay · `1`–`5` level
+
+## Credits
+
+Piano samples: [Salamander Grand Piano V3](https://archive.org/details/SalamanderGrandPianoV3) by Alexander Holm, licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). Trimmed, shortened and re-encoded for this app (via the [@audio-samples](https://github.com/darosh/samples-piano-mp3) npm packages). Rebuild with `python3 tools/build_samples.py <download-dir>`.
 
 ## Run locally
 

@@ -1,4 +1,4 @@
-import { Piano, midiToFreq, inharmonicity } from './audio.js';
+import { SampledPiano, SynthPiano, prefetchSamples, keyFor, midiToFreq, inharmonicity } from './audio.js';
 
 const LEVELS = [
   { short: '½', unit: 'step', name: 'Half step', cents: 100 },
@@ -66,14 +66,20 @@ if (saved.opts) {
 
 // ---------- audio ----------
 let ctx = null;
-let piano = null;
+let sampler = null;
+let synth = null;     // fallback if samples can't load
+let playToken = 0;
 function ensureAudio() {
   if (!ctx) {
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* iOS mute switch */ }
     ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
-    piano = new Piano(ctx);
+    sampler = new SampledPiano(ctx);
   }
   if (ctx.state !== 'running') ctx.resume();
+}
+function stopSound() {
+  sampler?.stopAll();
+  synth?.stopAll();
 }
 
 // ---------- helpers ----------
@@ -96,9 +102,9 @@ function newTrial() {
   const dir = Math.random() < 0.5 ? 1 : -1;
   const m2 = m1 + (dir * cents) / 100;
   const vary = el.optDyn.checked;
-  const v1 = vary ? rand(0.3, 1) : 0.7;
-  const v2 = vary ? rand(0.3, 1) : 0.7;
-  return { m1, m2, dir, cents, v1, v2, B: inharmonicity(midiToFreq(m1)) };
+  const v1 = vary ? Math.random() : 0.6;
+  const v2 = vary ? Math.random() : 0.6;
+  return { m1, m2, dir, cents, v1, v2, key: keyFor(m1).midi, B: inharmonicity(midiToFreq(m1)) };
 }
 
 function clearTimers() {
@@ -113,16 +119,40 @@ function at(seconds, fn) {
 }
 
 // ---------- flow ----------
-function playTrial() {
+async function playTrial() {
   const t = state.trial;
+  const token = ++playToken;
   ensureAudio();
   clearTimers();
-  piano.stopAll();
+  stopSound();
+
+  // Both notes use the sample key picked for the first note, so the interval is exact.
+  const notes = [{ keyMidi: t.key, velocity: t.v1 }, { keyMidi: t.key, velocity: t.v2 }];
+  let useSynth = false;
+  const slow = setTimeout(() => { el.playLabel.textContent = 'Loading…'; }, 150);
+  try {
+    await sampler.load(notes);
+  } catch (err) {
+    console.warn('Piano samples unavailable, using synth:', err);
+    useSynth = true;
+  }
+  clearTimeout(slow);
+  if (token !== playToken || state.trial !== t) return; // superseded by a newer action
+  render();
+  if (useSynth) {
+    synth ||= new SynthPiano(ctx);
+    el.detail.textContent = 'Couldn’t load piano samples — using a synth piano.';
+  }
 
   const start = ctx.currentTime + 0.08;
   const t2 = start + NOTE_DUR + GAP;
-  piano.play(midiToFreq(t.m1), start, { velocity: t.v1, duration: NOTE_DUR, B: t.B });
-  piano.play(midiToFreq(t.m2), t2, { velocity: t.v2, duration: NOTE_DUR, B: t.B });
+  if (useSynth) {
+    synth.play(midiToFreq(t.m1), start, { velocity: 0.3 + 0.7 * t.v1, duration: NOTE_DUR, B: t.B });
+    synth.play(midiToFreq(t.m2), t2, { velocity: 0.3 + 0.7 * t.v2, duration: NOTE_DUR, B: t.B });
+  } else {
+    sampler.play(t.m1, start, { velocity: t.v1, duration: NOTE_DUR, keyMidi: t.key });
+    sampler.play(t.m2, t2, { velocity: t.v2, duration: NOTE_DUR, keyMidi: t.key });
+  }
 
   const lead = start - ctx.currentTime;
   at(lead, () => el.dot1.classList.add('on'));
@@ -222,7 +252,8 @@ function buildLevels() {
       setLevel(i);
       if (state.phase === 'awaiting' || state.phase === 'playing') {
         // Switch immediately: drop the unanswered trial.
-        piano?.stopAll();
+        stopSound();
+        playToken++;
         clearTimers();
         state.phase = 'idle';
         state.trial = null;
@@ -297,3 +328,6 @@ document.addEventListener('keydown', (e) => {
 
 buildLevels();
 render();
+// Download samples in the background so the first Play is instant.
+if ('requestIdleCallback' in window) requestIdleCallback(prefetchSamples, { timeout: 1500 });
+else setTimeout(prefetchSamples, 300);
