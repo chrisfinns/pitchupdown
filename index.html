@@ -13,6 +13,10 @@
 <body>
   <main class="app">
     <header class="top">
+      <button class="log-btn" id="logOpen" type="button" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M7 16V11M12 16V6M17 16v-3"/></svg>
+        Log
+      </button>
       <h1>Pitch Up Down</h1>
       <p class="sub">Two piano notes. Did the second one go up or down?</p>
     </header>
@@ -66,9 +70,39 @@
       <span><kbd>Space</kbd> play / next</span>
       <span><kbd>↑</kbd><kbd>↓</kbd> answer</span>
       <span><kbd>1</kbd>–<kbd>5</kbd> level</span>
+      <span><kbd>L</kbd> log</span>
     </footer>
     <p class="credit">Piano: <a href="https://archive.org/details/SalamanderGrandPianoV3" target="_blank" rel="noopener">Salamander Grand Piano V3</a> by Alexander Holm, <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC BY 3.0</a></p>
   </main>
+
+  <dialog class="sheet" id="logDlg" aria-labelledby="logTitle">
+    <div class="sheet-head">
+      <h2 id="logTitle">Mistake log</h2>
+      <button class="close" id="logClose" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="sheet-body">
+      <div class="filters">
+        <label>Level <select id="logLevel"></select></label>
+        <label>Period
+          <select id="logPeriod">
+            <option value="all">All time</option>
+            <option value="30">Last 30 days</option>
+            <option value="7">Last 7 days</option>
+            <option value="today">Today</option>
+          </select>
+        </label>
+      </div>
+      <div id="logBody"></div>
+    </div>
+    <div class="sheet-foot">
+      <span class="muted">Saved in this browser only.</span>
+      <button type="button" id="logExport">Export CSV</button>
+      <button type="button" id="logClear" class="danger">Clear</button>
+    </div>
+  </dialog>
+
   <script type="module" src="app.js"></script>
 </body>
 </html>

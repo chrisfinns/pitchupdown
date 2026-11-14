@@ -9,8 +9,9 @@ Ear-training web app: two piano notes play, you say whether the second went **up
 - Real piano: Salamander Grand Piano V3, 4 velocity layers, a sample every 3 semitones (C2–D♯5), ~2 MB
 - Exact microtonal pitch: each sample's tuning was measured (`tools/build_samples.py`) and is corrected at playback; both notes of a pair come from the same sample key
 - Falls back to a synthesized piano if samples can't load
+- **Mistake log** (`L` or the Log button): every answer is saved in the browser; shows trouble notes (clearly below your usual accuracy at the same levels), accuracy per starting note, patterns (up vs down, register, louder vs softer 2nd note, level) and recent answers; filter by level/period; export CSV
 
-Keys: `Space` play/next · `↑` `↓` answer · `R` replay · `1`–`5` level
+Keys: `Space` play/next · `↑` `↓` answer · `R` replay · `1`–`5` level · `L` log
 
 ## Credits
 

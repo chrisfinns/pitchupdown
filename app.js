@@ -1,12 +1,6 @@
 import { SampledPiano, SynthPiano, prefetchSamples, keyFor, midiToFreq, inharmonicity } from './audio.js';
-
-const LEVELS = [
-  { short: '½', unit: 'step', name: 'Half step', cents: 100 },
-  { short: '¼', unit: 'tone', name: 'Quarter tone', cents: 50 },
-  { short: '⅛', unit: 'tone', name: 'Eighth tone', cents: 25 },
-  { short: '1/16', unit: 'tone', name: 'Sixteenth tone', cents: 12.5 },
-  { short: '1/32', unit: 'tone', name: 'Thirty-second tone', cents: 6.25 },
-];
+import { LEVELS, noteName, fmtCents } from './music.js';
+import * as log from './log.js';
 
 const NOTE_DUR = 1.0;   // seconds each note sounds
 const GAP = 0.3;        // silence between notes
@@ -18,8 +12,6 @@ const CORE = [45, 76];
 const LOW = [36, 45];
 const LOW_CHANCE = 0.2;
 
-const NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
-
 const $ = (id) => document.getElementById(id);
 const el = {
   levels: $('levels'), levelName: $('levelName'),
@@ -29,6 +21,8 @@ const el = {
   feedback: $('feedback'), detail: $('detail'),
   streak: $('streak'), best: $('best'), acc: $('acc'), pips: $('pips'), pipsLabel: $('pipsLabel'),
   optDyn: $('optDyn'), optLow: $('optLow'), optAuto: $('optAuto'),
+  logOpen: $('logOpen'), logDlg: $('logDlg'), logClose: $('logClose'), logBody: $('logBody'),
+  logLevel: $('logLevel'), logPeriod: $('logPeriod'), logExport: $('logExport'), logClear: $('logClear'),
 };
 
 // ---------- persistence (best effort) ----------
@@ -84,16 +78,6 @@ function stopSound() {
 
 // ---------- helpers ----------
 const rand = (a, b) => a + Math.random() * (b - a);
-
-function noteName(m) {
-  const n = Math.round(m);
-  const cents = Math.round((m - n) * 100);
-  const name = NAMES[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1);
-  if (cents === 0) return name;
-  return `${name} ${cents > 0 ? '+' : '−'}${Math.abs(cents)}¢`;
-}
-
-const fmtCents = (c) => `${+c.toFixed(2)}¢`;
 
 function newTrial() {
   const cents = LEVELS[state.level].cents;
@@ -186,6 +170,7 @@ function answer(dir) {
   if (state.phase !== 'awaiting') return; // answerable once the second note starts
   const t = state.trial;
   const ok = dir === t.dir;
+  log.record(t, dir);
   const rec = state.perLevel[state.level];
   rec.t++;
   if (ok) rec.c++;
@@ -292,6 +277,29 @@ function render() {
   el.pipsLabel.textContent = auto ? 'To level up' : 'Correct';
 }
 
+// ---------- log ----------
+function renderLog() {
+  log.renderLog(el.logBody, { level: el.logLevel.value, period: el.logPeriod.value });
+}
+function openLog() {
+  if (el.logDlg.open) return;
+  renderLog();
+  el.logDlg.showModal();
+  el.logBody.scrollTop = 0;
+}
+el.logLevel.innerHTML = '<option value="all">All levels</option>'
+  + LEVELS.map((lv, i) => `<option value="${i}">${lv.name} · ${fmtCents(lv.cents)}</option>`).join('');
+el.logOpen.addEventListener('click', openLog);
+el.logClose.addEventListener('click', () => el.logDlg.close());
+el.logDlg.addEventListener('click', (e) => { if (e.target === el.logDlg) el.logDlg.close(); }); // backdrop
+el.logLevel.addEventListener('change', renderLog);
+el.logPeriod.addEventListener('change', renderLog);
+el.logExport.addEventListener('click', () => log.exportCSV());
+el.logClear.addEventListener('click', () => {
+  const n = log.entries().length;
+  if (n && confirm(`Delete all ${n} logged answers? This can't be undone.`)) { log.clear(); renderLog(); }
+});
+
 // ---------- input ----------
 el.play.addEventListener('click', primary);
 el.replay.addEventListener('click', replay);
@@ -306,7 +314,7 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+  if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || el.logDlg.open) return;
   const onControl = e.target.closest && e.target.closest('button, input');
   switch (e.key) {
     case ' ':
@@ -321,6 +329,8 @@ document.addEventListener('keydown', (e) => {
       e.preventDefault(); answer(-1); break;
     case 'r': case 'R':
       replay(); break;
+    case 'l': case 'L':
+      openLog(); break;
     default:
       if (/^[1-5]$/.test(e.key)) el.levels.children[Number(e.key) - 1].click();
   }
